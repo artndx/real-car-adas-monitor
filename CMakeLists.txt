@@ -40,23 +40,25 @@ endif()
 message(STATUS "ONNX Runtime include: ${ONNXRUNTIME_INCLUDE_DIRS}")
 message(STATUS "ONNX Runtime library: ${ONNXRUNTIME_LIBRARIES}")
 
-# 4. Сборка исполняемого файла
-set (EXECUTABLE_NAME RealCarMonitor)
+# 4. Библиотека с общим исходным кодом
 file(GLOB SOURCES "src/*.cpp")
-add_executable(${EXECUTABLE_NAME} ${SOURCES})
-
-# Подключение заголовочных файлов
-target_include_directories(${EXECUTABLE_NAME} PRIVATE 
+add_library(lib STATIC ${SOURCES})
+target_include_directories(lib PUBLIC 
     ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
     ${ONNXRUNTIME_INCLUDE_DIRS}
 )
 
-# Линковка библиотек
-target_link_libraries(${EXECUTABLE_NAME} PRIVATE
+target_link_libraries(lib PRIVATE
     ${OpenCV_LIBS}
     ${ONNXRUNTIME_LIBRARIES}
 )
+
+# 5. Сборка исполняемого файла
+set (EXECUTABLE_NAME RealCarMonitor)
+add_executable(${EXECUTABLE_NAME} src/main.cpp)
+
+target_link_libraries(${EXECUTABLE_NAME} PRIVATE lib)
 
 # Поиск .so файлы при запуске
 set_target_properties(${EXECUTABLE_NAME} PROPERTIES
@@ -64,23 +66,12 @@ set_target_properties(${EXECUTABLE_NAME} PROPERTIES
     BUILD_WITH_INSTALL_RPATH FALSE
 )
 
-# 5. Сборка тестов
+# 6. Сборка тестов
 set (RUN_TESTS_NAME RunTests)
 file(GLOB TEST_SOURCES "tests/*.cpp")
 add_executable(${RUN_TESTS_NAME} ${TEST_SOURCES})
 
-target_include_directories(${RUN_TESTS_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${OpenCV_INCLUDE_DIRS}
-    ${ONNXRUNTIME_INCLUDE_DIRS}
-)
-
 target_link_libraries(${RUN_TESTS_NAME} PRIVATE
-    GTest::gtest_main       # Целевая библиотека от FetchContent
-    ${OpenCV_LIBS}
-    ${ONNXRUNTIME_LIBRARIES}
+    GTest::gtest_main
+    lib
 )
-
-# Включаем тесты в CTest для удобства запуска
-include(GoogleTest)
-gtest_discover_tests(RunTests)

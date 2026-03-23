@@ -1,89 +1,87 @@
 #include <gtest/gtest.h>
+#include <env.h>
+#include <fstream>
+#include <obd_parser.h>
 
-// ==================== OpenCV ====================
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/version.hpp>
+using namespace obd;
 
-// ==================== ONNX Runtime ====================
-#include <onnxruntime_cxx_api.h>
-
-// ==================== Тесты OpenCV ====================
-TEST(OpenCVTest, VersionStringNotEmpty) {
-    EXPECT_FALSE(std::string(CV_VERSION).empty());
-    std::cout << "OpenCV version: " << CV_VERSION << std::endl;
-}
-
-TEST(OpenCVTest, CanCreateMat) {
-    cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 255, 0));
+TEST(OBDParser, LabelTypeParsing) 
+{
+    EXPECT_EQ(getLabelType("SLOW"), LabelType::SLOW);
+    EXPECT_EQ(getLabelType("NORMAL"), LabelType::NORMAL);
+    EXPECT_EQ(getLabelType("AGGRESSIVE"), LabelType::AGGRESSIVE);
     
-    EXPECT_EQ(mat.rows, 100);
-    EXPECT_EQ(mat.cols, 100);
-    EXPECT_EQ(mat.channels(), 3);
-    EXPECT_EQ(mat.type(), CV_8UC3);
+    EXPECT_EQ(getLabelType("UNKNOWN"), LabelType::NONE);
+    EXPECT_EQ(getLabelType(""), LabelType::NONE);
 }
 
-TEST(OpenCVTest, CanProcessImage) {
-    // Создаём тестовое изображение
-    cv::Mat src = cv::Mat::zeros(64, 64, CV_8UC1);
-    cv::circle(src, cv::Point(32, 32), 20, cv::Scalar(255), -1);
+class OBDParserTest : public ::testing::Test {
+protected:
+    inline static const std::string TEST_DATASET_NAME = "test.csv";
+    inline static const path TEST_DATASET = PROJECT_DIR / DATA_FOLDER / TEST_DATASET_NAME;
     
-    // Применяем размытие — проверка, что алгоритмы работают
-    cv::Mat dst;
-    cv::GaussianBlur(src, dst, cv::Size(5, 5), 1.5);
-    
-    EXPECT_EQ(dst.size(), src.size());
-    EXPECT_GT(cv::mean(dst)[0], 0);  // После размытия должны быть ненулевые значения
-}
-
-// ==================== Тесты ONNX Runtime ====================
-TEST(OnnxRuntimeTest, CanCreateEnv) {
-    // Ort::Env должен создаваться без исключений
-    EXPECT_NO_THROW({
-        Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "TestEnv");
-        EXPECT_TRUE(env);
-    });
-}
-
-TEST(OnnxRuntimeTest, CanCreateAllocator) {
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "TestEnv");
-    
-    EXPECT_NO_THROW({
-        Ort::AllocatorWithDefaultOptions allocator;
-        // Проверяем, что аллокатор работает — выделяем и освобождаем память
-        void* ptr = allocator.Alloc(1024);
-        EXPECT_NE(ptr, nullptr);
-        allocator.Free(ptr);
-    });
-}
-
-TEST(OnnxRuntimeTest, VersionStringAvailable) {
-    // Проверяем, что можем получить версию через C-API
-    const char* version = OrtGetApiBase()->GetVersionString();
-    EXPECT_NE(version, nullptr);
-    if (version) {
-        std::cout << "ONNX Runtime API version: " << version << std::endl;
-        EXPECT_GT(std::strlen(version), 0);
+    void TearDown() override {
+        if (fs::exists(TEST_DATASET)) {
+            fs::remove(TEST_DATASET);
+        }
     }
+    
+    void CreateValidCSV(int rows = 3) {
+        std::ofstream out(TEST_DATASET);
+        out << "speed_kmh,engine_rpm,throttle_pos,coolant_temp,fuel_level,intake_air_temp,label\n";
+        for (int i = 0; i < rows; ++i) {
+            out << (60.0 + i * 10) << "," 
+                << (2500 + i * 100) << ","
+                << (45.0 + i * 5) << ","
+                << (90.0 + i * 2) << ","
+                << (75.0 - i * 5) << ","
+                << (25.0 + i * 3) << ","
+                << "NORMAL\n";
+        }
+        out.close();
+    }
+
+    void CreateInvalidCSV(int rows = 3) {
+        std::ofstream out(TEST_DATASET);
+        out << "speed_kmh,engine_rpm,throttle_pos,coolant_temp,fuel_level,intake_air_temp,label\n"
+            << "60.5,2500,45.0,90.0,75.0,25.0,NORMAL\n"
+            << "INVALID,ROW\n"
+            << "80.0,3200,60.0,92.0,70.0,28.0,AGGRESSIVE\n"
+            << "70.0,abc,50.0,88.0,65.0,20.0,SLOW\n"
+            << "50.0,2000,40.0,85.0,80.0,22.0,SLOW\n";
+        out.close();
+    }
+};
+
+TEST_F(OBDParserTest, NonExistData) {
+    OBDParser parser;
+    EXPECT_EQ(parser.load("-.csv"), -1);
 }
 
-// ==================== Интеграционный тест ====================
-TEST(IntegrationTest, OpenCV_And_ONNX_Together) {
-    // Проверяем, что библиотеки не конфликтуют при совместном использовании
+TEST_F(OBDParserTest, InvalidIndex) {
+    CreateValidCSV(1);
     
-    // 1. Создаём изображение через OpenCV
-    cv::Mat image(224, 224, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f));
+    OBDParser parser;
+    int count = parser.load(TEST_DATASET);
+    EXPECT_THROW(parser.getRecord(10), std::out_of_range);
+}
+
+TEST_F(OBDParserTest, ValidData) {
+    CreateValidCSV(5);
     
-    // 2. Инициализируем ONNX Runtime
-    Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "IntegrationTest");
-    Ort::SessionOptions session_options;
-    session_options.SetIntraOpNumThreads(1);
+    OBDParser parser;
+    int count = parser.load(TEST_DATASET);
     
-    // 3. Проверяем, что данные из OpenCV можно использовать
-    // (например, получить указатель на данные для передачи в ONNX)
-    float* data = image.ptr<float>(0);
-    EXPECT_NE(data, nullptr);
-    EXPECT_EQ(image.total() * image.channels(), 224 * 224 * 3);
+    EXPECT_EQ(count, 5);
+    EXPECT_NO_THROW(parser.getRecord(0));
+    EXPECT_NO_THROW(parser.getRecord(4));
+}
+
+TEST_F(OBDParserTest, InvalidRowsData) {
+    CreateInvalidCSV(5);
     
-    // 4. Проверяем, что ONNX Environment всё ещё жив
-    EXPECT_TRUE(env);
+    OBDParser parser;
+    int count = parser.load(TEST_DATASET);
+    
+    EXPECT_EQ(count, 3);  // 3 корректные из 5
 }
