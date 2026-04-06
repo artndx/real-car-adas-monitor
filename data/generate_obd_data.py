@@ -21,12 +21,14 @@ OUT_INTAKE_AIR_TEMP = "intake_air_temp"
 OUT_LABEL = "label"
 
 def classify_label(speed, rpm, throttle):
-    if rpm < 2000 and speed < 60 and throttle < 30:
+    if speed <= 10 and rpm <= 1000:
         return "SLOW"
-    elif rpm < 4000 and speed < 100:
-        return "NORMAL"
-    else:
+    elif (speed >= 35 or rpm >= 1600) and throttle >= 80:
         return "AGGRESSIVE"
+    elif rpm >= 1800 and throttle >= 87:
+        return "AGGRESSIVE"
+    else:
+        return "NORMAL"
 
 def classify_fuel_level(fuel_level, speed, rpm, throttle):
     fuel_rate = (
