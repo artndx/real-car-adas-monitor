@@ -17,9 +17,9 @@ namespace obd
         return LabelType::NONE;
     }
 
-    int OBDParser::load(const std::string& file)
+    int OBDParser::load(const std::string& dataset_path)
     {
-        std::ifstream in(file, std::ios_base::in);
+        std::ifstream in(dataset_path, std::ios_base::in);
         if(!in.is_open())
         {
             std::cerr << "Error open file" << std::endl;
@@ -53,12 +53,12 @@ namespace obd
                     
                 m_records.emplace_back(
                     row_count,
-                    std::stod(tokens.at(0)),
-                    std::stod(tokens.at(1)),
-                    std::stod(tokens.at(2)),
-                    std::stod(tokens.at(3)),
-                    std::stod(tokens.at(4)),
-                    std::stod(tokens.at(5)),
+                    std::stof(tokens.at(0)),
+                    std::stof(tokens.at(1)),
+                    std::stof(tokens.at(2)),
+                    std::stof(tokens.at(3)),
+                    std::stof(tokens.at(4)),
+                    std::stof(tokens.at(5)),
                     getLabelType(tokens.at(6))
                 );
             }

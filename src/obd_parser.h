@@ -40,13 +40,13 @@ namespace obd
                 m_label(label){}
         
         size_t m_id = 0;
-        double m_speed = 0.0;
-        double m_engine_rpm = 0.0;
-        double m_throttle_position = 0.0;
+        float m_speed = 0.0;
+        float m_engine_rpm = 0.0;
+        float m_throttle_position = 0.0;
 
-        double m_coolant_temp = 0.0;
-        double m_fuel_level = 0.0;
-        double m_intake_air_temp = 0.0;
+        float m_coolant_temp = 0.0;
+        float m_fuel_level = 0.0;
+        float m_intake_air_temp = 0.0;
 
         LabelType m_label = LabelType::SLOW;
     };
@@ -70,7 +70,7 @@ namespace obd
     private:
         OBDRecords m_records;
     public:
-        int load(const std::string& file);
+        int load(const std::string& dataset_path);
         OBDRecord& getRecord(size_t index);
         const OBDRecord& getRecord(size_t index) const;
     private:
