@@ -3,6 +3,7 @@
 #include <fstream>
 #include <obd_parser.h>
 #include <onnx_classifier.h>
+#include <opencv2/opencv.hpp>
 
 void obdParsing()
 {
@@ -29,7 +30,8 @@ void obdParsing()
     }
 }
 
-int main() {  
+int onnxClassifier() 
+{  
     onnx::ONNXClassifier classifier;
     
     if (classifier.loadModel(MODEL_PATH) != 0) {
@@ -83,4 +85,10 @@ int main() {
     std::cout << "Требование: >= 80%\n";
     
     return 0;
+}
+
+int main() 
+{  
+    cv::Mat frame = cv::Mat::zeros(480, 1280, CV_8UC3); // Полный кадр 1280x480
+    cv::imshow("Dashboard Test", frame);
 }
