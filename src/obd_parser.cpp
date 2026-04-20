@@ -5,18 +5,6 @@
 
 namespace obd
 {
-    LabelType getLabelType(std::string_view token)
-    {
-        if(token == "SLOW")
-            return LabelType::SLOW;
-        else if(token == "NORMAL")
-            return LabelType::NORMAL;
-        else if(token == "AGGRESSIVE")
-            return LabelType::AGGRESSIVE;
-
-        return LabelType::NONE;
-    }
-
     int OBDParser::load(const std::string& dataset_path)
     {
         std::ifstream in(dataset_path, std::ios_base::in);

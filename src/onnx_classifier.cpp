@@ -15,7 +15,7 @@ namespace onnx
             Ort::SessionOptions session_options;
             session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-            m_currentSession = std::make_unique<Ort::Session>(*m_env, model_path.c_str(),session_options);
+            m_current_session = std::make_unique<Ort::Session>(*m_env, model_path.c_str(), session_options);
         }
         catch(const std::exception& e)
         {
@@ -85,7 +85,7 @@ namespace onnx
                 if (token.back() == '"') 
                     token.pop_back();
                 
-                out[i] = obd::getLabelType(token);
+                out[i] = getLabelType(token);
             }
             return 0;
         };
@@ -114,7 +114,7 @@ namespace onnx
     ClassificationResult ONNXClassifier::classify(const ArrayF<6>& features) const
     {
         // случай когда модель не загружена – бросить std::runtime_error. 
-        if (!m_currentSession) 
+        if (!m_current_session) 
             throw std::runtime_error("ONNX model not loaded");
 
         // нормализовать их (z-score: (x - mean) / std); 
@@ -138,7 +138,7 @@ namespace onnx
         const char* input_names[] = {"features"};
         const char* output_names[] = {"class_scores"};
 
-        std::vector<Ort::Value> output_tensors = m_currentSession->Run(
+        std::vector<Ort::Value> output_tensors = m_current_session->Run(
             Ort::RunOptions{nullptr},
             input_names,
             &input_tensor,

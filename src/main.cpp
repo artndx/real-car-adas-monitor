@@ -3,34 +3,34 @@
 #include <fstream>
 #include <obd_parser.h>
 #include <onnx_classifier.h>
-#include <opencv2/opencv.hpp>
+#include <dashboard.h>
 
-void obdParsing()
+void test_obdParsing()
 {
     obd::OBDParser parser;
     int row_count = parser.load(DATASET_PATH);
-    size_t slowLabelCount = 0;
-    size_t normalLabelCount = 0;
-    size_t aggressiveLabelCount = 0;
+    size_t slow_count = 0;
+    size_t normal_count = 0;
+    size_t aggres_count = 0;
     for(size_t i = 0; i < row_count; ++i)
     {
-        obd::OBDRecord& record = parser.getRecord(i);
-        if(record.m_label == obd::LabelType::SLOW)
-            slowLabelCount++;
-        else if(record.m_label == obd::LabelType::NORMAL)
-            normalLabelCount++;
-        else if(record.m_label == obd::LabelType::AGGRESSIVE)
-            aggressiveLabelCount++;
+        OBDRecord& record = parser.getRecord(i);
+        if(record.m_label == LabelType::SLOW)
+            slow_count++;
+        else if(record.m_label == LabelType::NORMAL)
+            normal_count++;
+        else if(record.m_label == LabelType::AGGRESSIVE)
+            aggres_count++;
     }
 
-    std::cout << "{ SLOW : " << slowLabelCount << ", NORMAL : " << normalLabelCount << ", " << "AGGRESSIVE : " << aggressiveLabelCount << " }" << std::endl;
+    std::cout << "{ SLOW : " << slow_count << ", NORMAL : " << normal_count << ", " << "AGGRESSIVE : " << aggres_count << " }" << std::endl;
     for(size_t i = 0; i < 5; ++i)
     {
         std::cout << parser.getRecord(i) << std::endl;
     }
 }
 
-int onnxClassifier() 
+int test_onnxClassifier() 
 {  
     onnx::ONNXClassifier classifier;
     
@@ -56,7 +56,7 @@ int onnxClassifier()
     int row_count = parser.load(DATASET_PATH);
     for(size_t i = 2320; i < std::min(row_count, 2320+20); ++i)
     {
-        obd::OBDRecord& record = parser.getRecord(i);
+        OBDRecord& record = parser.getRecord(i);
         onnx::ArrayF<6> features = {
             record.m_speed,
             record.m_engine_rpm,
@@ -68,8 +68,8 @@ int onnxClassifier()
 
         auto result = classifier.classify(features);
         
-        obd::LabelType true_label = record.m_label;
-        obd::LabelType prediction_label = result.m_label;
+        LabelType true_label = record.m_label;
+        LabelType prediction_label = result.m_label;
 
         if (true_label == prediction_label)
             ++correct;
@@ -87,8 +87,39 @@ int onnxClassifier()
     return 0;
 }
 
-int main() 
-{  
-    cv::Mat frame = cv::Mat::zeros(480, 1280, CV_8UC3); // Полный кадр 1280x480
-    cv::imshow("Dashboard Test", frame);
+int test_dashboard() 
+{
+    using namespace dashboard;
+
+    try 
+    {
+        Dashboard dash;
+
+        obd::OBDParser parser;
+        int row_count = parser.load(DATASET_PATH);
+        size_t row_idx = 1000;
+
+        std::cout << "Press any key to exit..." << std::endl;
+        while(cv::waitKey(150) == -1)
+        {
+            if(row_idx >= row_count)
+                break;
+
+            OBDRecord record = parser.getRecord(row_idx++);
+            cv::Mat frame = dash.draw(record);
+            cv::imshow("Dashboard Test", frame);
+        }
+
+        cv::destroyAllWindows();
+    
+        return 0;
+    } catch (const std::exception& e) 
+    {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+}
+
+int main() {
+    return test_dashboard();
 }

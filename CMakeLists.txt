@@ -43,7 +43,7 @@ message(STATUS "ONNX Runtime library: ${ONNXRUNTIME_LIBRARIES}")
 # 4. Библиотека с общим исходным кодом
 file(GLOB SOURCES "src/*.cpp")
 add_library(lib STATIC ${SOURCES})
-target_include_directories(lib PUBLIC 
+target_include_directories(lib SYSTEM PUBLIC 
     ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
     ${ONNXRUNTIME_INCLUDE_DIRS}

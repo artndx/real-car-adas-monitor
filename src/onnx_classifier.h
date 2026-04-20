@@ -1,16 +1,16 @@
 #pragma once
 #include <onnxruntime_cxx_api.h>
-#include <obd_parser.h>
+#include <common.h>
 
 namespace onnx
 {   
     template<std::size_t S>
     using ArrayF = std::array<float, S>;
-    using Labels = std::array<obd::LabelType, 3>;
+    using Labels = std::array<LabelType, 3>;
 
     struct ClassificationResult
     {
-        obd::LabelType m_label;
+        LabelType m_label;
         float m_confidence = 0.0;
         ArrayF<3> m_scores;
     };
@@ -37,7 +37,7 @@ namespace onnx
         ClassificationResult classify(const ArrayF<6>& features) const;
     private:
         std::unique_ptr<Ort::Env> m_env;
-        std::unique_ptr<Ort::Session> m_currentSession;
+        std::unique_ptr<Ort::Session> m_current_session;
 
         ArrayF<6> m_mean{};                     // средние значения признаков
         ArrayF<6> m_std{};                      // стандартные отклонения
