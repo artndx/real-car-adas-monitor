@@ -1,9 +1,11 @@
 #include <iostream>
 #include <env.h>
 #include <fstream>
+
 #include <obd_parser.h>
 #include <onnx_classifier.h>
 #include <dashboard.h>
+#include <dms_hud.h>
 
 void test_obdParsing()
 {
@@ -34,7 +36,7 @@ int test_onnxClassifier()
 {  
     onnx::ONNXClassifier classifier;
     
-    if (classifier.loadModel(MODEL_PATH) != 0) {
+    if (classifier.loadModel(DRIVER_CLASS_MODEL_PATH) != 0) {
         std::cerr << "Failed to load model\n";
         return 1;
     }
@@ -120,6 +122,61 @@ int test_dashboard()
     }
 }
 
+int test_dms()
+{
+    dms::DMSMonitor monitor;
+    dms::DMSHUD hud;
+
+    if (!monitor.loadModels(DNN_FACE_DETECTOR_DEPLOY_PATH, DNN_FACE_DETECTOR_MODEL_PATH, HAAR_CASCADE_PATH)) 
+    {
+        std::cerr << "Error load models" << std::endl;
+        return 1;
+    }
+
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened()) 
+    {
+        std::cerr << "Webcam is not opened" << std::endl;
+        return 1;
+    }
+
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+
+    cv::Mat frame;
+    while (true) 
+    {
+        cap >> frame;
+        if (frame.empty()) 
+        {
+            std::cerr << "Frame is empty frame" << std::endl;
+            break;
+        }
+
+        auto state = monitor.analyze(frame);
+        hud.render(frame, state);
+
+        std::cout << "\r[STATE] Face:" << std::boolalpha << state.m_face_detected
+                  << " | Eyes:" << state.m_eyes_open
+                  << " | Head:" << (state.m_looking_forward ? "FWD" : "SIDE")
+                  << " | Drowsy:" << state.m_alert_drowsy
+                  << " | Distract:" << state.m_alert_distracted
+                  << " | Angle:" << std::fixed << state.m_head_turn_deg << "°"
+                  << std::flush;
+
+        cv::imshow("test_dms", frame);
+
+        int key = cv::waitKey(30) & 0xFF;
+        if (key == 'q' || key == 27) 
+            break;
+    }
+
+    cap.release();
+    cv::destroyAllWindows();
+
+    return 0;
+}
+
 int main() {
-    return test_dashboard();
+    return test_dms();
 }
