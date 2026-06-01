@@ -17,6 +17,14 @@ namespace dms
         cv::Rect m_face_rect;
     };
 
+    struct EyeRect
+    {   
+        float m_openness = 0.0f;
+        cv::Rect m_rect;
+    };
+
+    using EyesFragment = std::pair<EyeRect, EyeRect>;
+
     class DMSMonitor
     {
     public:
@@ -31,8 +39,11 @@ namespace dms
         cv::dnn::Net m_faceDetector;
         cv::CascadeClassifier m_eyeCascade;
 
-        cv::Rect detectFace(const cv::Mat& frame, float& outConfidence);
-        float estimateEyeOpenness(cv::Mat face);
+        cv::Rect detectFace(const cv::Mat& frame);
+        EyesFragment estimateEyeOpenness(const cv::Mat& frame, const cv::Rect& faceRect);
+        float calculateEyeOpenness(const cv::Mat& eyeRoiGray);
         float estimateHeadTurn(const cv::Rect& faceRect, const cv::Size& frameSize);
+        void updateEyeHistory(bool eyesOpen);
+        bool computeDrowsiness() const;
     };
 }

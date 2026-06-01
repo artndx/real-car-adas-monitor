@@ -1,4 +1,5 @@
 #include <dms_monitor.h>
+#include <env.h>
 
 namespace dms
 {
@@ -38,129 +39,238 @@ namespace dms
     DriverState DMSMonitor::analyze(const cv::Mat& frame)
     {
         DriverState state;
+        state.m_face_rect = detectFace(frame);
 
-        float faceConfidence = 0.0f;
-        state.m_face_rect = detectFace(frame, faceConfidence);
-        state.m_face_detected = (state.m_face_rect.area() > 0 && faceConfidence >= 0.5f);
-
-        if (!state.m_face_detected) 
+        if (state.m_face_rect.area() <= 0)
             return state;
 
-        cv::Mat faceRoi = frame(state.m_face_rect);
-        state.m_eye_openness = estimateEyeOpenness(faceRoi);
-        static float baseline = 0.5f;
-        baseline = 0.95f * baseline + 0.05f * state.m_eye_openness;
-
-        state.m_eyes_open = (state.m_eye_openness > baseline * 0.6f);
-        state.m_head_turn_deg = estimateHeadTurn(state.m_face_rect, frame.size());
-        state.m_looking_forward = (std::abs(state.m_head_turn_deg) <= 30.0f);  // ±30° = "прямо"
-
-        m_lastFrames.push_back(!state.m_eyes_open);
-        if (m_lastFrames.size() > m_frameCount) 
-            m_lastFrames.pop_front();
+        state.m_face_detected = true;
+#ifdef PRINT_FRAMES
+        std::string frame_file = FRAMES_PATH / "frame.png";
+        cv::imwrite(frame_file, frame);
+        std::string face_file = FRAMES_PATH / "face.png";
+        cv::imwrite(face_file, frame(state.m_face_rect));
+#endif
+        EyesFragment eyes = estimateEyeOpenness(frame, state.m_face_rect);
+        float leftOpenness = eyes.first.m_openness;
+        float rightOpenness = eyes.second.m_openness;
+    
+        float avgOpenness = 0.0f;
+        int validCount = 0;
         
-        if (m_lastFrames.size() == m_frameCount) 
-        {
-            const size_t closedCount = std::count(m_lastFrames.begin(), m_lastFrames.end(), true);
-            
-            state.m_alert_drowsy = (closedCount >= m_frameLimit);
+        if (leftOpenness > 0.06f) {
+            avgOpenness += leftOpenness;
+            validCount++;
         }
-
-        state.m_alert_distracted = (!state.m_looking_forward || !state.m_face_detected);
+        if (rightOpenness > 0.06f) {
+            avgOpenness += rightOpenness;
+            validCount++;
+        }
+        
+        if (validCount > 0) {
+            avgOpenness /= validCount;
+        }
+        
+        state.m_eye_openness = avgOpenness;
+        state.m_eyes_open = (state.m_eye_openness > 0.5f);
+        state.m_head_turn_deg = estimateHeadTurn(state.m_face_rect, frame.size());
+        state.m_looking_forward = std::abs(state.m_head_turn_deg) < 15.0f;
+        updateEyeHistory(state.m_eyes_open);
+        state.m_alert_drowsy = computeDrowsiness();
+        state.m_alert_distracted = !state.m_looking_forward;
 
         return state;
     }
 
-    cv::Rect DMSMonitor::detectFace(const cv::Mat& frame, float& outConfidence)
+    cv::Rect DMSMonitor::detectFace(const cv::Mat& frame)
     {
-        cv::Mat blob = cv::dnn::blobFromImage(frame, 
-                                              1.0f, 
-                                              cv::Size(300, 300),
-                                              cv::Scalar(104.0, 177.0, 123.0),
-                                              false,
-                                              false);
+        cv::Mat blob = cv::dnn::blobFromImage(frame, 1.0, cv::Size(300, 300), cv::Scalar(104, 177, 123));
 
         m_faceDetector.setInput(blob);
+
         cv::Mat detections = m_faceDetector.forward();
 
-        cv::Rect bestRect;
-        const int numDetections = detections.size[2];
-        
-        float bestConfidence = std::numeric_limits<float>::min();
-        for (int i = 0; i < numDetections; ++i) 
+        cv::Mat detMat(
+            detections.size[2],
+            detections.size[3],
+            CV_32F,
+            detections.ptr<float>());
+
+        float bestConfidence = 0.5f;
+        cv::Rect bestFace;
+
+        for (int i = 0; i < detMat.rows; ++i)
         {
-            const float* det = detections.ptr<float>(0, 0, i);
-            float confidence = det[2];
-            
-            if (confidence > 0.5f && confidence >= bestConfidence) 
+            float confidence = detMat.at<float>(i, 2);
+
+            if (confidence < bestConfidence)
+                continue;
+
+            int x1 = static_cast<int>(detMat.at<float>(i, 3) * frame.cols);
+            int y1 = static_cast<int>(detMat.at<float>(i, 4) * frame.rows);
+            int x2 = static_cast<int>(detMat.at<float>(i, 5) * frame.cols);
+            int y2 = static_cast<int>(detMat.at<float>(i, 6) * frame.rows);
+
+            cv::Rect rect(cv::Point(x1, y1), cv::Point(x2, y2));
+
+            rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+
+            bestConfidence = confidence;
+            bestFace = rect;
+        }
+
+        return bestFace;
+    }
+
+    EyesFragment DMSMonitor::estimateEyeOpenness(const cv::Mat& frame, const cv::Rect& faceRect)
+    {
+        EyesFragment result;
+
+        int eyeHeight = static_cast<int>(faceRect.height * 0.4);
+        int eyeY = faceRect.y + static_cast<int>(faceRect.height * 0.15);
+        cv::Rect eyesRoi(faceRect.x, eyeY, faceRect.width, eyeHeight);
+        eyesRoi &= cv::Rect(0, 0, frame.cols, frame.rows);
+
+        if (eyesRoi.area() <= 0) 
+            return result;
+
+        cv::Mat roiGray;
+        cv::cvtColor(frame(eyesRoi), roiGray, cv::COLOR_BGR2GRAY);
+        cv::equalizeHist(roiGray, roiGray);
+
+        std::vector<cv::Rect> eyes;
+        m_eyeCascade.detectMultiScale(roiGray, eyes, 1.1, 3, 0, cv::Size(20, 20));
+
+        if (eyes.empty())
+            return result;
+        
+
+        std::sort(eyes.begin(), eyes.end(), 
+                [](const cv::Rect& a, const cv::Rect& b) {
+                    return a.x < b.x;
+                });
+
+        size_t numEyes = std::min(eyes.size(), (size_t)2);
+        for (size_t i = 0; i < numEyes; ++i) {
+            cv::Rect eyeRect = eyes[i];
+            float openness = calculateEyeOpenness(roiGray(eyeRect));
+#ifdef PRINT_FRAMES
+        cv::Mat copy;
+        roiGray.copyTo(copy);
+        
+        cv::Mat eyeImg = copy(eyeRect).clone();
+
+        cv::putText(
+            eyeImg,
+            std::format("{:.2f}", openness),
+            cv::Point(3, 15),
+            cv::FONT_HERSHEY_SIMPLEX,
+            0.4,
+            cv::Scalar(255),
+            1
+        );
+        cv::imwrite(FRAMES_PATH / "eye.png", eyeImg);
+#endif
+                        
+            if (i == 0) 
             {
-                int x1 = static_cast<int>(det[3] * frame.cols);
-                int y1 = static_cast<int>(det[4] * frame.rows);
-                int x2 = static_cast<int>(det[5] * frame.cols);
-                int y2 = static_cast<int>(det[6] * frame.rows);
-
-                cv::Rect rect(x1, y1, x2 - x1, y2 - y1);
-
-                bool validSize = (rect.width > 30 && rect.height > 30);
-                bool inBounds = (rect.x >= 0 && rect.y >= 0 && 
-                                rect.x + rect.width <= frame.cols && 
-                                rect.y + rect.height <= frame.rows);
-
-                if (validSize && inBounds) 
-                {
-                    bestRect = rect;
-                    bestConfidence = confidence;
-                }
+                result.first.m_openness = openness;
+                result.first.m_rect = eyeRect;
+            } else 
+            {
+                result.second.m_openness = openness;
+                result.second.m_rect = eyeRect;
             }
         }
 
-        outConfidence = bestConfidence;
-        return bestRect;
+        return result;
     }
 
-    float DMSMonitor::estimateEyeOpenness(cv::Mat face)
+    float DMSMonitor::calculateEyeOpenness(const cv::Mat& eyeRoiGray)
     {
-        if (face.empty())
+        cv::Mat blur;
+        cv::GaussianBlur(eyeRoiGray, blur, {5,5}, 0);
+
+        cv::Mat bin;
+        cv::threshold(
+            blur,
+            bin,
+            0,
+            255,
+            cv::THRESH_BINARY_INV | cv::THRESH_OTSU);
+
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(
+            bin,
+            contours,
+            cv::RETR_EXTERNAL,
+            cv::CHAIN_APPROX_SIMPLE);
+
+        if (contours.empty())
             return 0.0f;
-        
-        cv::Rect upperFace(0, 0, face.cols, face.rows / 2);
-        face = face(upperFace);
 
-        std::vector<cv::Rect> eyes;
-        m_eyeCascade.detectMultiScale(face, eyes, 1.1, 5, 
-                                      cv::CASCADE_SCALE_IMAGE,
-                                      cv::Size(20, 20));
+        double maxArea = 0.0;
+        cv::Rect bestRect;
 
-        if (eyes.empty())
-            return 0.0f;
+        for (const auto& c : contours)
+        {
+            double area = cv::contourArea(c);
 
-        auto largestEye = std::max_element(eyes.begin(), eyes.end(),
-            [](const cv::Rect& a, const cv::Rect& b) { 
-                return a.area() < b.area(); 
-            });
+            if (area > maxArea)
+            {
+                maxArea = area;
+                bestRect = cv::boundingRect(c);
+            }
+        }
 
-        cv::Mat eyeImg = face(*largestEye);
-        
-        cv::Mat gray, blurred, thresh;
-        cv::cvtColor(eyeImg, gray, cv::COLOR_BGR2GRAY);
-        cv::GaussianBlur(gray, blurred, cv::Size(5, 5), 0);
-        cv::threshold(blurred, thresh, 0, 255, cv::THRESH_BINARY_INV + cv::THRESH_OTSU);
+        float openness =
+            static_cast<float>(bestRect.height) /
+            static_cast<float>(eyeRoiGray.rows);
 
-        const float darkRatio = static_cast<float>(cv::countNonZero(thresh)) 
-                              / static_cast<float>(thresh.total());
-
-        float openness = 1.0f - std::clamp(darkRatio * 1.5f, 0.0f, 1.0f);
-        
-        return openness;
+        return std::clamp(openness, 0.0f, 1.0f);
     }
 
     float DMSMonitor::estimateHeadTurn(const cv::Rect& faceRect, const cv::Size& frameSize)
     {
-        const float faceCenterX = faceRect.x + faceRect.width / 2.0f;
-        const float frameCenterX = frameSize.width / 2.0f;
+        static float smoothedYaw = 0.0f;
 
-        const float normalizedOffset = (faceCenterX - frameCenterX) / (frameSize.width / 2.0f);
-        
-        return std::clamp(normalizedOffset * 90.0f, -90.0f, 90.0f);
+        if (faceRect.area() <= 0 || frameSize.width <= 0)
+            return smoothedYaw;
+
+        float faceCenterX = faceRect.x + faceRect.width * 0.5f;
+        float frameCenterX = frameSize.width * 0.5f;
+
+        float offset = (faceCenterX - frameCenterX) / frameCenterX;
+
+        if (std::abs(offset) < 0.03f)
+            offset = 0.0f;
+
+        float yaw = offset * 35.0f;
+        smoothedYaw = 0.85f * smoothedYaw + 0.15f * yaw;
+
+        return smoothedYaw;
+    }
+
+    void DMSMonitor::updateEyeHistory(bool eyesOpen)
+    {
+        m_lastFrames.emplace_back(eyesOpen);
+
+        while (m_lastFrames.size() > m_frameCount)
+        {
+            m_lastFrames.pop_front();
+        }
+    }
+
+    bool DMSMonitor::computeDrowsiness() const
+    {
+        int closedFrames = 0;
+
+        for (bool open : m_lastFrames)
+        {
+            if (!open)
+                ++closedFrames;
+        }
+
+        return closedFrames >= m_frameLimit;    
     }
 }

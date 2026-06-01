@@ -13,6 +13,7 @@ static const std::string DATASET_FILE = "dataset.csv";
 static const path DATASET_PATH = PROJECT_DIR / DATA_FOLDER / DATASET_FILE;
 
 /* output */
+#define PRINT_FRAMES
 static const std::string OUTPUT_FOLDER = "output";
 static const std::string FRAMES_FOLDER = "frames";
 static const path FRAMES_PATH = PROJECT_DIR / OUTPUT_FOLDER / FRAMES_FOLDER;

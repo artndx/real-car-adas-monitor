@@ -145,23 +145,19 @@ int test_dms()
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
 
     cv::Mat frame;
-    size_t frameIndex = 0;
     while (true)
     {
-        cap.grab();           // взять кадр (без декодирования)
+        cap.grab();
         
-        if (!cap.retrieve(frame))  // получить последний
+        if (!cap.retrieve(frame))
             continue;
 
-        auto state = monitor.analyze(frame);
-        hud.render(frame, state);
-        std::string file = FRAMES_PATH / std::format("frame_{}.png", frameIndex);
-        if(frameIndex < 60)
-            cv::imwrite(file, frame);
+        dms::DriverState state = monitor.analyze(frame);
+        cv::Mat output(480, 1280, CV_8UC3, cv::Scalar(30, 30, 30));
 
-        cv::imshow("test_dms", frame);
+        hud.draw(output, frame, state);
 
-        ++frameIndex;
+        cv::imshow("test_dms", output);
         if (cv::waitKey(1) == 27)
             break;
     }
