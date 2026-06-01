@@ -32,7 +32,7 @@ namespace dms
         cv::CascadeClassifier m_eyeCascade;
 
         cv::Rect detectFace(const cv::Mat& frame, float& outConfidence);
-        float estimateEyeOpenness(const cv::Mat& faceRoi);
+        float estimateEyeOpenness(cv::Mat face);
         float estimateHeadTurn(const cv::Rect& faceRect, const cv::Size& frameSize);
     };
 }

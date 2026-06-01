@@ -65,7 +65,7 @@ namespace dms
 
         cv::Point anglePos = headPos + cv::Point(0, lineStep);
         std::ostringstream oss;
-        oss << "Turn angle: " << std::fixed << std::setprecision(1) << state.m_head_turn_deg << "°";
+        oss << "Turn angle: " << std::fixed << std::setprecision(1) << state.m_head_turn_deg;
         cv::putText(frame, oss.str(), anglePos + cv::Point(10, 10), fontFace, 0.6, colors::TEXT, 1);
     }
 

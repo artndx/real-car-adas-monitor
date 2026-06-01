@@ -48,8 +48,10 @@ namespace dms
 
         cv::Mat faceRoi = frame(state.m_face_rect);
         state.m_eye_openness = estimateEyeOpenness(faceRoi);
-        state.m_eyes_open = (state.m_eye_openness >= 0.3f);  // Порог открытости
+        static float baseline = 0.5f;
+        baseline = 0.95f * baseline + 0.05f * state.m_eye_openness;
 
+        state.m_eyes_open = (state.m_eye_openness > baseline * 0.6f);
         state.m_head_turn_deg = estimateHeadTurn(state.m_face_rect, frame.size());
         state.m_looking_forward = (std::abs(state.m_head_turn_deg) <= 30.0f);  // ±30° = "прямо"
 
@@ -116,20 +118,20 @@ namespace dms
         return bestRect;
     }
 
-    float DMSMonitor::estimateEyeOpenness(const cv::Mat& faceRoi)
+    float DMSMonitor::estimateEyeOpenness(cv::Mat face)
     {
-        if (faceRoi.empty()) 
+        if (face.empty())
             return 0.0f;
-
-        cv::Rect eyesRoi(0, 0, faceRoi.cols, faceRoi.rows / 2);
-        cv::Mat eyesRegion = faceRoi(eyesRoi);
         
+        cv::Rect upperFace(0, 0, face.cols, face.rows / 2);
+        face = face(upperFace);
+
         std::vector<cv::Rect> eyes;
-        m_eyeCascade.detectMultiScale(eyesRegion, eyes, 1.1, 5, 
+        m_eyeCascade.detectMultiScale(face, eyes, 1.1, 5, 
                                       cv::CASCADE_SCALE_IMAGE,
                                       cv::Size(20, 20));
 
-        if (eyes.empty()) 
+        if (eyes.empty())
             return 0.0f;
 
         auto largestEye = std::max_element(eyes.begin(), eyes.end(),
@@ -137,7 +139,7 @@ namespace dms
                 return a.area() < b.area(); 
             });
 
-        cv::Mat eyeImg = eyesRegion(*largestEye);
+        cv::Mat eyeImg = face(*largestEye);
         
         cv::Mat gray, blurred, thresh;
         cv::cvtColor(eyeImg, gray, cv::COLOR_BGR2GRAY);

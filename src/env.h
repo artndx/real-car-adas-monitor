@@ -12,7 +12,13 @@ static const std::string DATA_FOLDER = "data";
 static const std::string DATASET_FILE = "dataset.csv";
 static const path DATASET_PATH = PROJECT_DIR / DATA_FOLDER / DATASET_FILE;
 
-/* models*/
+/* output */
+static const std::string OUTPUT_FOLDER = "output";
+static const std::string FRAMES_FOLDER = "frames";
+static const path FRAMES_PATH = PROJECT_DIR / OUTPUT_FOLDER / FRAMES_FOLDER;
+
+
+/* models */
 static const std::string MODELS_FOLDER = "models";
 
 static const std::string DRIVER_CLASS_MODEL_FILE = "driver_classifier.onnx";

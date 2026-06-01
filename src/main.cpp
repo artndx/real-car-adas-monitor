@@ -133,41 +133,36 @@ int test_dms()
         return 1;
     }
 
-    cv::VideoCapture cap(0);
+    cv::VideoCapture cap("tcp://172.28.0.1:5000", cv::CAP_FFMPEG);
     if (!cap.isOpened()) 
     {
         std::cerr << "Webcam is not opened" << std::endl;
         return 1;
     }
-
+    
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
 
     cv::Mat frame;
-    while (true) 
+    size_t frameIndex = 0;
+    while (true)
     {
-        cap >> frame;
-        if (frame.empty()) 
-        {
-            std::cerr << "Frame is empty frame" << std::endl;
-            break;
-        }
+        cap.grab();           // взять кадр (без декодирования)
+        
+        if (!cap.retrieve(frame))  // получить последний
+            continue;
 
         auto state = monitor.analyze(frame);
         hud.render(frame, state);
-
-        std::cout << "\r[STATE] Face:" << std::boolalpha << state.m_face_detected
-                  << " | Eyes:" << state.m_eyes_open
-                  << " | Head:" << (state.m_looking_forward ? "FWD" : "SIDE")
-                  << " | Drowsy:" << state.m_alert_drowsy
-                  << " | Distract:" << state.m_alert_distracted
-                  << " | Angle:" << std::fixed << state.m_head_turn_deg << "°"
-                  << std::flush;
+        std::string file = FRAMES_PATH / std::format("frame_{}.png", frameIndex);
+        if(frameIndex < 60)
+            cv::imwrite(file, frame);
 
         cv::imshow("test_dms", frame);
 
-        int key = cv::waitKey(30) & 0xFF;
-        if (key == 'q' || key == 27) 
+        ++frameIndex;
+        if (cv::waitKey(1) == 27)
             break;
     }
 
@@ -178,5 +173,6 @@ int test_dms()
 }
 
 int main() {
+    // return test_dashboard();
     return test_dms();
 }
