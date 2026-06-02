@@ -17,7 +17,12 @@ static const path DATASET_PATH = PROJECT_DIR / DATA_FOLDER / DATASET_FILE;
 static const std::string OUTPUT_FOLDER = "output";
 static const std::string FRAMES_FOLDER = "frames";
 static const path FRAMES_PATH = PROJECT_DIR / OUTPUT_FOLDER / FRAMES_FOLDER;
-
+static const std::string SCREENSHOT_FILE = "screenshot.png";
+static const path SCREENSHOT_PATH = PROJECT_DIR / OUTPUT_FOLDER / SCREENSHOT_FILE;
+static const std::string VIDEO_RECORD_FILE = "result_situation2.mp4";
+static const path VIDEO_RECORD_PATH = PROJECT_DIR / OUTPUT_FOLDER / VIDEO_RECORD_FILE;
+static const std::string LOG_FILE = "dms_alerts.log";
+static const path LOG_PATH = PROJECT_DIR / OUTPUT_FOLDER / LOG_FILE;
 
 /* models */
 static const std::string MODELS_FOLDER = "models";
@@ -36,3 +41,12 @@ static const path DNN_FACE_DETECTOR_MODEL_PATH = PROJECT_DIR / MODELS_FOLDER / D
 
 static const std::string HAAR_CASCADE_FILE = "haarcascade_eye.xml";
 static const path HAAR_CASCADE_PATH = PROJECT_DIR / MODELS_FOLDER / HAAR_CASCADE_FILE;
+
+/* input frames*/
+#define INPUT_FRAMES_FROM_MND_FOLDER
+static const path MNT_FRAME_PATH = "/mnt/c/frame.jpg";
+
+[[noodiscard]] inline int nop()
+{
+    return 0;
+}

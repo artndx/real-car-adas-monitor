@@ -30,6 +30,9 @@ sudo apt-get install -y \
     gcc-13 \
     g++-13
 
+# Doxygen для документации
+sudo apt install doxygen
+
 # Делаем GCC 13 дефолтным (опционально)
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 130
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 130

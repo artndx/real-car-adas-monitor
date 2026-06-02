@@ -3,14 +3,14 @@
 
 namespace dms
 {
-    bool DMSMonitor::loadModels(const std::string& deploy_path, 
-                    const std::string& dnn_face_detect_path, 
-                    const std::string& haar_cascade_path)
+    bool DMSMonitor::loadModels(const std::string& deploy_path,
+        const std::string& dnn_face_detect_path,
+        const std::string& haar_cascade_path)
     {
-        try 
+        try
         {
             m_faceDetector = cv::dnn::readNetFromCaffe(deploy_path, dnn_face_detect_path);
-            if (m_faceDetector.empty()) 
+            if (m_faceDetector.empty())
             {
                 std::cerr << std::format("Error loading deploy file: {} )", deploy_path) << std::endl;
                 std::cerr << std::format("Error loading dnn model file: {} )", dnn_face_detect_path) << std::endl;
@@ -20,25 +20,37 @@ namespace dms
             m_faceDetector.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
             m_faceDetector.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 
-            if (!m_eyeCascade.load(haar_cascade_path)) 
+            if (!m_eyeCascade.load(haar_cascade_path))
             {
                 std::cerr << std::format("Error loading haar cascade file: {} )", haar_cascade_path) << std::endl;
                 return false;
             }
 
             m_lastFrames.clear();
+            m_isLoaded = true;
             return true;
         }
-        catch (const cv::Exception& e) 
+        catch (const cv::Exception& e)
         {
             std::cerr << e.what() << std::endl;
             return false;
         }
     }
 
+    bool DMSMonitor::isLoaded() const
+    {
+        return m_isLoaded;
+    }
+
     DriverState DMSMonitor::analyze(const cv::Mat& frame)
     {
         DriverState state;
+        if (!isLoaded())
+            throw "Models is not loaded";
+
+        if (frame.empty())
+            return state;
+
         state.m_face_rect = detectFace(frame);
 
         if (state.m_face_rect.area() <= 0)
@@ -54,10 +66,10 @@ namespace dms
         EyesFragment eyes = estimateEyeOpenness(frame, state.m_face_rect);
         float leftOpenness = eyes.first.m_openness;
         float rightOpenness = eyes.second.m_openness;
-    
+
         float avgOpenness = 0.0f;
         int validCount = 0;
-        
+
         if (leftOpenness > 0.06f) {
             avgOpenness += leftOpenness;
             validCount++;
@@ -66,11 +78,11 @@ namespace dms
             avgOpenness += rightOpenness;
             validCount++;
         }
-        
+
         if (validCount > 0) {
             avgOpenness /= validCount;
         }
-        
+
         state.m_eye_openness = avgOpenness;
         state.m_eyes_open = (state.m_eye_openness > 0.5f);
         state.m_head_turn_deg = estimateHeadTurn(state.m_face_rect, frame.size());
@@ -131,7 +143,7 @@ namespace dms
         cv::Rect eyesRoi(faceRect.x, eyeY, faceRect.width, eyeHeight);
         eyesRoi &= cv::Rect(0, 0, frame.cols, frame.rows);
 
-        if (eyesRoi.area() <= 0) 
+        if (eyesRoi.area() <= 0)
             return result;
 
         cv::Mat roiGray;
@@ -143,40 +155,41 @@ namespace dms
 
         if (eyes.empty())
             return result;
-        
 
-        std::sort(eyes.begin(), eyes.end(), 
-                [](const cv::Rect& a, const cv::Rect& b) {
-                    return a.x < b.x;
-                });
+
+        std::sort(eyes.begin(), eyes.end(),
+            [](const cv::Rect& a, const cv::Rect& b) {
+                return a.x < b.x;
+            });
 
         size_t numEyes = std::min(eyes.size(), (size_t)2);
         for (size_t i = 0; i < numEyes; ++i) {
             cv::Rect eyeRect = eyes[i];
             float openness = calculateEyeOpenness(roiGray(eyeRect));
 #ifdef PRINT_FRAMES
-        cv::Mat copy;
-        roiGray.copyTo(copy);
-        
-        cv::Mat eyeImg = copy(eyeRect).clone();
+            cv::Mat copy;
+            roiGray.copyTo(copy);
 
-        cv::putText(
-            eyeImg,
-            std::format("{:.2f}", openness),
-            cv::Point(3, 15),
-            cv::FONT_HERSHEY_SIMPLEX,
-            0.4,
-            cv::Scalar(255),
-            1
-        );
-        cv::imwrite(FRAMES_PATH / "eye.png", eyeImg);
+            cv::Mat eyeImg = copy(eyeRect).clone();
+
+            cv::putText(
+                eyeImg,
+                std::format("{:.2f}", openness),
+                cv::Point(3, 15),
+                cv::FONT_HERSHEY_SIMPLEX,
+                0.4,
+                cv::Scalar(255),
+                1
+            );
+            cv::imwrite(FRAMES_PATH / "eye.png", eyeImg);
 #endif
-                        
-            if (i == 0) 
+
+            if (i == 0)
             {
                 result.first.m_openness = openness;
                 result.first.m_rect = eyeRect;
-            } else 
+            }
+            else
             {
                 result.second.m_openness = openness;
                 result.second.m_rect = eyeRect;
@@ -189,7 +202,7 @@ namespace dms
     float DMSMonitor::calculateEyeOpenness(const cv::Mat& eyeRoiGray)
     {
         cv::Mat blur;
-        cv::GaussianBlur(eyeRoiGray, blur, {5,5}, 0);
+        cv::GaussianBlur(eyeRoiGray, blur, { 5,5 }, 0);
 
         cv::Mat bin;
         cv::threshold(
@@ -271,6 +284,6 @@ namespace dms
                 ++closedFrames;
         }
 
-        return closedFrames >= m_frameLimit;    
+        return closedFrames >= m_frameLimit;
     }
 }

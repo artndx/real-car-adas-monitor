@@ -18,7 +18,7 @@ namespace dms
     };
 
     struct EyeRect
-    {   
+    {
         float m_openness = 0.0f;
         cv::Rect m_rect;
     };
@@ -28,11 +28,14 @@ namespace dms
     class DMSMonitor
     {
     public:
-        bool loadModels(const std::string& deploy_path, 
-                    const std::string& dnn_face_detect_path, 
-                    const std::string& haar_cascade_path);
+        bool loadModels(const std::string& deploy_path,
+            const std::string& dnn_face_detect_path,
+            const std::string& haar_cascade_path);
+
+        bool isLoaded() const;
         DriverState analyze(const cv::Mat& frame);
     private:
+        bool m_isLoaded = false;
         const static size_t m_frameCount = 15;
         const static size_t m_frameLimit = 10;
         std::deque<bool> m_lastFrames;

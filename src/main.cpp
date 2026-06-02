@@ -8,17 +8,25 @@
 #include <onnx_classifier.h>
 #include <dashboard.h>
 #include <dms_hud.h>
+#include <logger.h>
+#include <stat_tool.h>
 
 void test_obdParsing()
 {
     obd::OBDParser parser;
-    int row_count = parser.load(DATASET_PATH);
+    if (!parser.loadFile(DATASET_PATH))
+    {
+        std::cerr << "Cannot load CSV\n";
+        return;
+    }
+
+    int row_count = parser.readAll();
     size_t slow_count = 0;
     size_t normal_count = 0;
     size_t aggres_count = 0;
     for (size_t i = 0; i < row_count; ++i)
     {
-        OBDRecord &record = parser.getRecord(i);
+        OBDRecord& record = parser.getRecord(i);
         if (record.m_label == LabelType::SLOW)
             slow_count++;
         else if (record.m_label == LabelType::NORMAL)
@@ -51,25 +59,31 @@ int test_onnxClassifier()
 
     // Заголовок таблицы
     std::cout << std::left
-              << std::setw(12) << "Истинная "
-              << std::setw(14) << "Предсказанная "
-              << std::setw(12) << "Уверенность " << "\n";
+        << std::setw(12) << "Истинная "
+        << std::setw(14) << "Предсказанная "
+        << std::setw(12) << "Уверенность " << "\n";
     std::cout << std::string(38, '-') << "\n";
 
     size_t correct = 0;
 
     obd::OBDParser parser;
-    int row_count = parser.load(DATASET_PATH);
+    if (!parser.loadFile(DATASET_PATH))
+    {
+        std::cerr << "Cannot load CSV\n";
+        return 1;
+    }
+
+    int row_count = parser.readAll();
     for (size_t i = 2320; i < std::min(row_count, 2320 + 20); ++i)
     {
-        OBDRecord &record = parser.getRecord(i);
+        OBDRecord& record = parser.getRecord(i);
         onnx::ArrayF<6> features = {
             record.m_speed,
             record.m_engine_rpm,
             record.m_throttle_position,
             record.m_coolant_temp,
             record.m_fuel_level,
-            record.m_intake_air_temp};
+            record.m_intake_air_temp };
 
         auto result = classifier.classify(features);
 
@@ -80,9 +94,9 @@ int test_onnxClassifier()
             ++correct;
 
         std::cout << std::left
-                  << std::setw(12) << true_label
-                  << std::setw(14) << prediction_label
-                  << std::fixed << std::setprecision(3) << result.m_confidence << "\n";
+            << std::setw(12) << true_label
+            << std::setw(14) << prediction_label
+            << std::fixed << std::setprecision(3) << result.m_confidence << "\n";
     }
 
     double accuracy = (static_cast<double>(correct) / 20) * 100.0;
@@ -101,7 +115,12 @@ int test_dashboard()
         Dashboard dash;
 
         obd::OBDParser parser;
-        int row_count = parser.load(DATASET_PATH);
+        if (!parser.loadFile(DATASET_PATH))
+        {
+            std::cerr << "Cannot load CSV\n";
+            return -1;
+        }
+        int row_count = parser.readAll();
         size_t row_idx = 1000;
 
         std::cout << "Press any key to exit..." << std::endl;
@@ -120,7 +139,7 @@ int test_dashboard()
 
         return 0;
     }
-    catch (const std::exception &e)
+    catch (const std::exception& e)
     {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
@@ -137,8 +156,8 @@ int test_dms()
         std::cerr << "Error load models" << std::endl;
         return 1;
     }
-
-    cv::VideoCapture cap("tcp://172.28.0.1:5000", cv::CAP_FFMPEG);
+#ifndef INPUT_FRAMES_FROM_MND_FOLDER
+    cv::VideoCapture cap(0);
     if (!cap.isOpened())
     {
         std::cerr << "Webcam is not opened" << std::endl;
@@ -148,14 +167,20 @@ int test_dms()
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
+#endif
 
     cv::Mat frame;
     while (true)
     {
+#ifdef INPUT_FRAMES_FROM_MND_FOLDER
+        frame = cv::imread(MNT_FRAME_PATH);
+        if (frame.empty())
+            continue;
+#else
         cap.grab();
-
         if (!cap.retrieve(frame))
             continue;
+#endif
 
         dms::DriverState state = monitor.analyze(frame);
         cv::Mat output(480, 1280, CV_8UC3, cv::Scalar(30, 30, 30));
@@ -167,8 +192,10 @@ int test_dms()
             break;
     }
 
+#ifndef INPUT_FRAMES_FROM_MND_FOLDER
     cap.release();
     cv::destroyAllWindows();
+#endif
 
     return 0;
 }
@@ -188,8 +215,7 @@ int test_final()
     using namespace std::literals;
 
     obd::OBDParser parser;
-    int row_count = parser.load(DATASET_PATH);
-    if (row_count < 0)
+    if (!parser.loadFile(DATASET_PATH))
     {
         std::cerr << "Cannot load CSV\n";
         return 1;
@@ -218,7 +244,26 @@ int test_final()
         return 1;
     }
 
-    cv::VideoCapture cap("tcp://172.28.0.1:5000", cv::CAP_FFMPEG);
+    cv::VideoWriter writer(VIDEO_RECORD_PATH,
+        cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
+        10, cv::Size(1280, 480)
+    );
+
+    if (!writer.isOpened())
+    {
+        std::cerr << "Cannot open video writer" << std::endl;
+        return 1;
+    }
+
+    Logger logger;
+    if (!logger.open(LOG_PATH))
+    {
+        std::cerr << "Cannot open log file" << std::endl;
+        return 1;
+    }
+
+#ifndef INPUT_FRAMES_FROM_MND_FOLDER
+    cv::VideoCapture cap(0);
     if (!cap.isOpened())
     {
         std::cerr << "Webcam is not opened" << std::endl;
@@ -228,40 +273,54 @@ int test_final()
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
+#endif
+    StatTool stats;
+    stats.start();
 
     SharedState state;
     std::jthread obdParsing(
         [&]
         {
-            std::size_t index = 0;
             while (state.m_running)
             {
                 if (state.m_pause)
                 {
-                    std::this_thread::sleep_for(100s);
+                    std::this_thread::sleep_for(100ms);
                     continue;
                 }
 
-                OBDRecord record = parser.getRecord(index);
-                onnx::ClassificationResult result = classifier.classify(state.m_record);
+                OBDRecord record;
+                int res = parser.read(record);
+                if (res == -1)
+                    break;
+
+                if (res == -2)
+                    continue;
+
+                onnx::ClassificationResult result = classifier.classify(record);
 
                 {
                     std::lock_guard<std::mutex> lock(state.m_mutex);
                     state.m_record = record;
                     state.m_result = result;
+
+                    stats.recordOBD();
                     if (result.m_label == LabelType::AGGRESSIVE)
+                    {
                         state.m_alertCount++;
+                        stats.recordAlert(StatTool::AlertType::AGGRESSIVE);
+                        logger << std::format("AGGRESSIVE driving detected. Alert #{}", state.m_alertCount);
+                    }
                 }
-                ++index;
 
                 std::this_thread::sleep_for(100ms);
             }
         });
 
+    cv::Mat output(480, 1280, CV_8UC3, cv::Scalar(30, 30, 30));
     std::jthread dmsAnalyzing(
         [&]
         {
-            cv::Mat frame;
             while (state.m_running)
             {
                 int key = cv::waitKey(1);
@@ -269,8 +328,7 @@ int test_final()
                 {
                     std::lock_guard<std::mutex> lock(state.m_mutex);
                     state.m_running = false;
-                    cap.release();
-                    cv::destroyAllWindows();
+                    break;
                 }
                 else if (key == ' ')
                 {
@@ -279,13 +337,7 @@ int test_final()
                 }
                 else if (key == 's' || key == 'S')
                 {
-                    static int shotIndex = 0;
-
-                    std::string filename = "output/screenshot_" + std::to_string(shotIndex++) + ".png";
-                    cv::Mat screenshot;
-
-                    cap.read(screenshot);
-                    cv::imwrite(filename, screenshot);
+                    cv::imwrite(SCREENSHOT_PATH, output);
                 }
 
                 if (state.m_pause)
@@ -294,12 +346,22 @@ int test_final()
                     continue;
                 }
 
+                cv::Mat frame;
+#ifdef INPUT_FRAMES_FROM_MND_FOLDER
+                frame = cv::imread(MNT_FRAME_PATH);
+                if (frame.empty())
+                    continue;
+#else
                 cap.grab();
-
                 if (!cap.retrieve(frame))
                     continue;
-
+#endif
                 dms::DriverState driverState = monitor.analyze(frame);
+
+                if (driverState.m_alert_drowsy)
+                    stats.recordAlert(StatTool::AlertType::DROWSY);
+                else if (driverState.m_alert_distracted)
+                    stats.recordAlert(StatTool::AlertType::DISTRACTED);
 
                 OBDRecord record;
                 onnx::ClassificationResult result;
@@ -309,7 +371,6 @@ int test_final()
                     result = state.m_result;
                 }
 
-                cv::Mat output(480, 1280, CV_8UC3, cv::Scalar(30, 30, 30));
                 cv::Mat dashboard = output(cv::Rect(0, 0, 640, 480));
                 cv::Mat camera = output(cv::Rect(640, 0, 640, 480));
 
@@ -317,9 +378,17 @@ int test_final()
                 hud.draw(output, frame, driverState);
 
                 cv::imshow("test_final", output);
+                writer.write(output);
 
                 std::this_thread::sleep_for(100ms);
             }
+
+            cv::destroyAllWindows();
+            writer.release();
+#ifndef INPUT_FRAMES_FROM_MND_FOLDER
+            cap.release();
+#endif
+            stats.printSummary();
         });
 
     return 0;

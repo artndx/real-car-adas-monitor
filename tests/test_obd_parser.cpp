@@ -5,12 +5,12 @@
 
 using namespace obd;
 
-TEST(OBDParser, LabelTypeParsing) 
+TEST(OBDParser, LabelTypeParsing)
 {
     EXPECT_EQ(getLabelType("SLOW"), LabelType::SLOW);
     EXPECT_EQ(getLabelType("NORMAL"), LabelType::NORMAL);
     EXPECT_EQ(getLabelType("AGGRESSIVE"), LabelType::AGGRESSIVE);
-    
+
     EXPECT_EQ(getLabelType("UNKNOWN"), LabelType::NONE);
     EXPECT_EQ(getLabelType(""), LabelType::NONE);
 }
@@ -19,18 +19,18 @@ class OBDParserTest : public ::testing::Test {
 protected:
     inline static const std::string TEST_DATASET_NAME = "test.csv";
     inline static const path TEST_DATASET = PROJECT_DIR / DATA_FOLDER / TEST_DATASET_NAME;
-    
+
     void TearDown() override {
         if (fs::exists(TEST_DATASET)) {
             fs::remove(TEST_DATASET);
         }
     }
-    
+
     void CreateValidCSV(int rows = 3) {
         std::ofstream out(TEST_DATASET);
         out << "speed_kmh,engine_rpm,throttle_pos,coolant_temp,fuel_level,intake_air_temp,label\n";
         for (int i = 0; i < rows; ++i) {
-            out << (60.0 + i * 10) << "," 
+            out << (60.0 + i * 10) << ","
                 << (2500 + i * 100) << ","
                 << (45.0 + i * 5) << ","
                 << (90.0 + i * 2) << ","
@@ -55,23 +55,25 @@ protected:
 
 TEST_F(OBDParserTest, NonExistData) {
     OBDParser parser;
-    EXPECT_EQ(parser.load("-.csv"), -1);
+    EXPECT_EQ(parser.loadFile("-.csv"), false);
 }
 
 TEST_F(OBDParserTest, InvalidIndex) {
     CreateValidCSV(1);
-    
+
     OBDParser parser;
-    int count = parser.load(TEST_DATASET);
+    parser.loadFile(TEST_DATASET);
+    int count = parser.readAll();
     EXPECT_THROW(parser.getRecord(10), std::out_of_range);
 }
 
 TEST_F(OBDParserTest, ValidData) {
     CreateValidCSV(5);
-    
+
     OBDParser parser;
-    int count = parser.load(TEST_DATASET);
-    
+    parser.loadFile(TEST_DATASET);
+    int count = parser.readAll();
+
     EXPECT_EQ(count, 5);
     EXPECT_NO_THROW(parser.getRecord(0));
     EXPECT_NO_THROW(parser.getRecord(4));
@@ -79,9 +81,10 @@ TEST_F(OBDParserTest, ValidData) {
 
 TEST_F(OBDParserTest, InvalidRowsData) {
     CreateInvalidCSV(5);
-    
+
     OBDParser parser;
-    int count = parser.load(TEST_DATASET);
-    
+    parser.loadFile(TEST_DATASET);
+    int count = parser.readAll();
+
     EXPECT_EQ(count, 3);  // 3 корректные из 5
 }
