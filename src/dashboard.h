@@ -19,7 +19,7 @@ namespace dashboard
     public:
         Dashboard() = default;
         
-        cv::Mat draw(const OBDRecord& record);
+        void draw(cv::Mat& frame, const OBDRecord& record);
     private:
         void drawGauge(cv::Mat& frame, const cv::Point& center, int radius, 
                         const GaugeParams& params, float warning_threshold = -1.0f);

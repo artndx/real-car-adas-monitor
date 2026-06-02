@@ -156,6 +156,21 @@ namespace onnx
         return ClassificationResult{m_labels.at(max_prob_index), probs.at(max_prob_index), probs};
     }
 
+    ClassificationResult ONNXClassifier::classify(const OBDRecord& record) const
+    {
+        onnx::ArrayF<6> features = 
+        {
+            record.m_speed,
+            record.m_engine_rpm,
+            record.m_throttle_position,
+            record.m_coolant_temp,
+            record.m_fuel_level,
+            record.m_intake_air_temp
+        };
+
+        return classify(features);
+    }
+
     ArrayF<3> ONNXClassifier::softmax(const ArrayF<3>& logits)
     {
         float max_val = *std::max_element(logits.begin(), logits.end());

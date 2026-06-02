@@ -4,11 +4,9 @@
 
 namespace dashboard
 {
-    cv::Mat Dashboard::draw(const OBDRecord& record) 
-    {
-        cv::Mat frame = cv::Mat::zeros(480, 640, CV_8UC3);
-        
-        cv::Mat roi = frame(cv::Rect(0, 0, 640, 480));
+    void Dashboard::draw(cv::Mat& targetFrame, const OBDRecord& record) 
+    {    
+        cv::Mat roi = targetFrame(cv::Rect(0, 0, 640, 480));
         roi.setTo(cv::Scalar(15, 15, 15));
 
         GaugeParams speed_params {0, 140, record.m_speed, 90, "SPEED", "km/h"};
@@ -65,8 +63,6 @@ namespace dashboard
             drawWarning(roi, "LOW FUEL", cv::Point(30, warn_y - offset));
             offset += 25;
         }
-
-        return frame;
     }
 
     void Dashboard::drawGauge(cv::Mat& frame, const cv::Point& center, int radius, 

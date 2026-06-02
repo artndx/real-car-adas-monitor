@@ -35,6 +35,7 @@ namespace onnx
         int loadJson(const std::string& json_path);
         // классификация одного набора признаков
         ClassificationResult classify(const ArrayF<6>& features) const;
+        ClassificationResult classify(const OBDRecord& record) const;        
     private:
         std::unique_ptr<Ort::Env> m_env;
         std::unique_ptr<Ort::Session> m_current_session;
