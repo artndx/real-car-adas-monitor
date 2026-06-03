@@ -1,6 +1,8 @@
 #include <dms_monitor.h>
 #include <env.h>
 
+#include <fstream>
+
 namespace dms
 {
     bool DMSMonitor::loadModels(const std::string& deploy_path,
@@ -156,33 +158,23 @@ namespace dms
         if (eyes.empty())
             return result;
 
+        // Фильтруем: оставляем только тёмные детекции (настоящие глаза)
+        eyes.erase(std::remove_if(eyes.begin(), eyes.end(),
+            [&](const cv::Rect& r) {
+                cv::Scalar mean = cv::mean(roiGray(r));
+                return mean[0] > 110.0;  // светлее 110 — не глаз
+            }), eyes.end());
+
+        if (eyes.empty())
+            return result;
 
         std::sort(eyes.begin(), eyes.end(),
-            [](const cv::Rect& a, const cv::Rect& b) {
-                return a.x < b.x;
-            });
+            [](const cv::Rect& a, const cv::Rect& b) { return a.x < b.x; });
 
         size_t numEyes = std::min(eyes.size(), (size_t)2);
         for (size_t i = 0; i < numEyes; ++i) {
             cv::Rect eyeRect = eyes[i];
             float openness = calculateEyeOpenness(roiGray(eyeRect));
-#ifdef PRINT_FRAMES
-            cv::Mat copy;
-            roiGray.copyTo(copy);
-
-            cv::Mat eyeImg = copy(eyeRect).clone();
-
-            cv::putText(
-                eyeImg,
-                std::format("{:.2f}", openness),
-                cv::Point(3, 15),
-                cv::FONT_HERSHEY_SIMPLEX,
-                0.4,
-                cv::Scalar(255),
-                1
-            );
-            cv::imwrite(FRAMES_PATH / "eye.png", eyeImg);
-#endif
 
             if (i == 0)
             {
@@ -201,46 +193,26 @@ namespace dms
 
     float DMSMonitor::calculateEyeOpenness(const cv::Mat& eyeRoiGray)
     {
-        cv::Mat blur;
-        cv::GaussianBlur(eyeRoiGray, blur, { 5,5 }, 0);
-
-        cv::Mat bin;
-        cv::threshold(
-            blur,
-            bin,
-            0,
-            255,
-            cv::THRESH_BINARY_INV | cv::THRESH_OTSU);
-
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(
-            bin,
-            contours,
-            cv::RETR_EXTERNAL,
-            cv::CHAIN_APPROX_SIMPLE);
-
-        if (contours.empty())
+        if (eyeRoiGray.empty())
             return 0.0f;
 
-        double maxArea = 0.0;
-        cv::Rect bestRect;
+        cv::Mat blurred;
+        cv::GaussianBlur(eyeRoiGray, blurred, { 5, 5 }, 0);
 
-        for (const auto& c : contours)
-        {
-            double area = cv::contourArea(c);
+        // Резкость через Laplacian: открытый глаз имеет чёткие края радужки
+        cv::Mat lap;
+        cv::Laplacian(blurred, lap, CV_64F, 3);
+        cv::Scalar mean, stddev;
+        cv::meanStdDev(lap, mean, stddev);
+        float sharpness = static_cast<float>(stddev[0] * stddev[0]);  // variance
 
-            if (area > maxArea)
-            {
-                maxArea = area;
-                bestRect = cv::boundingRect(c);
-            }
-        }
-
-        float openness =
-            static_cast<float>(bestRect.height) /
-            static_cast<float>(eyeRoiGray.rows);
-
-        return std::clamp(openness, 0.0f, 1.0f);
+        // Эмпирически: закрытый ~20-80, открытый ~150-400
+        // Нормируем с порогом
+        float openness = std::clamp((sharpness - 30.0f) / 200.0f, 0.0f, 1.0f);
+#ifdef PRINT_FRAMES
+        cv::imwrite(FRAMES_PATH / "eye.png", eyeRoiGray);
+#endif
+        return openness;
     }
 
     float DMSMonitor::estimateHeadTurn(const cv::Rect& faceRect, const cv::Size& frameSize)
