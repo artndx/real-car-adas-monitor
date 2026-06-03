@@ -3,6 +3,11 @@
 #include <string_view>
 #include <chrono>
 
+/**
+ * @brief Перечисление типов стиля вождения.
+ *
+ * Используется для маркировки телеметрических записей и результатов классификации.
+ */
 enum class LabelType
 {
     NONE,
@@ -11,12 +16,36 @@ enum class LabelType
     AGGRESSIVE
 };
 
+/**
+ * @brief Выводит строковое представление типа стиля вождения в поток.
+ *
+ * @param out Выходной поток.
+ * @param type Тип стиля вождения.
+ * @return Ссылка на выходной поток.
+ */
 std::ostream& operator<<(std::ostream& out, LabelType type);
 
+/**
+ * @brief Преобразует строковый токен в тип стиля вождения.
+ *
+ * @param token Строковое представление метки.
+ * @return Соответствующий LabelType.
+ */
 LabelType getLabelType(std::string_view token);
 
+/**
+ * @brief Возвращает строковое представление типа стиля вождения.
+ *
+ * @param label_type Тип стиля вождения.
+ * @return Строковое имя типа.
+ */
 std::string getLabelTypeStr(LabelType label_type);
 
+/**
+ * @brief OBD-запись из CSV файла
+ *
+ * Содержит телеметрические параметры автомобиля и метку стиля вождения.
+ */
 struct OBDRecord
 {
     OBDRecord() = default;
@@ -41,6 +70,18 @@ struct OBDRecord
     LabelType m_label = LabelType::SLOW;
 };
 
+/**
+ * @brief Выводит содержимое OBD-записи в поток.
+ *
+ * @param out Выходной поток.
+ * @param r Ссылка на OBD-запись.
+ * @return Ссылка на выходной поток.
+ */
 std::ostream& operator<<(std::ostream& out, const OBDRecord& r);
 
+/**
+ * @brief Возвращает текущее системное время в виде строки.
+ *
+ * @return Строковое представление текущего времени.
+ */
 std::string getCurrentTime();
